@@ -1,0 +1,81 @@
+{
+  "Comment": "Document Processing without Textract",
+  "StartAt": "GetFileFromS3",
+  "States": {
+    "GetFileFromS3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "Bucket",
+        "Key.$": "$.detail.object.key"
+      },
+      "ResultPath": "$.S3File",
+      "Next": "ExtractText"
+    },
+    "ExtractText": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:<region>:<1account-id>:function:ExtractTextFromS3Json",
+      "ResultPath": "$",
+      "Next": "DetectSentiment"
+    },
+    "DetectSentiment": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:comprehend:detectSentiment",
+      "Parameters": {
+        "Text.$": "$.Text",
+        "LanguageCode": "en"
+      },
+      "ResultPath": "$.SentimentResult",
+      "Next": "PutInDynamoDB"
+    },
+    "PutInDynamoDB": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem",
+      "Parameters": {
+        "TableName": "DocumentSentimentTable",
+        "Item": {
+          "id": {
+            "S.$": "$.id"
+          },
+          "source": {
+            "S.$": "$.SourceFile"
+          },
+          "text": {
+            "S.$": "$.Text"
+          },
+          "sentiment": {
+            "S.$": "$.SentimentResult.Sentiment"
+          },
+          "confidence": {
+            "M": {
+              "Mixed": {
+                "S.$": "States.Format('{}', $.SentimentResult.SentimentScore.Mixed)"
+              },
+              "Negative": {
+                "S.$": "States.Format('{}', $.SentimentResult.SentimentScore.Negative)"
+              },
+              "Neutral": {
+                "S.$": "States.Format('{}', $.SentimentResult.SentimentScore.Neutral)"
+              },
+              "Positive": {
+                "S.$": "States.Format('{}', $.SentimentResult.SentimentScore.Positive)"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.DynamoDBResult",
+      "Next": "SendNotification"
+    },
+    "SendNotification": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:<region>:<account-id>:<topic>",
+        "Message.$": "$.SentimentResult.Sentiment",
+        "Subject": "Sentiment Result"
+      },
+      "End": true
+    }
+  }
+}
