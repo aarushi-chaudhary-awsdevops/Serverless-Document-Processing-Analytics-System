@@ -14,7 +14,7 @@
     },
     "ExtractText": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:<region>:<1account-id>:function:ExtractTextFromS3Json",
+      "Resource": "arn:aws:lambda:<region>:<account-id>:function:ExtractTextFromS3Json",
       "ResultPath": "$",
       "Next": "DetectSentiment"
     },
